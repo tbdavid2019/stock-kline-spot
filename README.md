@@ -5,7 +5,7 @@
 功能
 	1.	支援多種股票市場數據，包括美股和台股。
 	2.	自動辨識常見蠟燭圖形態（如晨星、三白兵等）。
-	3.	可視化的 K 線圖和成交量柱狀圖，並標註檢測到的形態。
+	3.	可視化的 K 線圖與成交量圖，並標註檢測到的形態。
 	4.	支援選擇特定的形態類型（看漲形態、看跌形態）。
 	5.	將分析結果匯出為 CSV 檔案供下載。
 
@@ -24,15 +24,15 @@ pip install yfinance ta-lib pandas gradio plotly numpy
 python app.py
 
 功能介面
-	1.	輸入股票代碼（例如 AAPL 或 2330.TW）。
-	2.	選擇分析的時間範圍（1 個月至 1 年）。
-	3.	選擇分析的蠟燭圖形態類型（看漲或看跌形態）。
-	4.	調整信號強度篩選（預設為 0 表示顯示所有檢測到的形態）。
+	1.	輸入股票代碼： 如 AAPL 或 2330.TW。
+	2.	選擇分析的時間範圍： 1 個月至 1 年。
+	3.	選擇蠟燭圖形態類型： 看漲形態或看跌形態。
+	4.	調整信號強度篩選： 預設為 0（顯示所有檢測到的形態）。
 	5.	點擊 Submit 按鈕檢視分析結果。
 
 功能說明
 	•	K 線圖與成交量圖： 顯示股票的價格走勢與成交量，並標註檢測到的形態位置。
-	•	形態檢測表格： 詳細列出檢測到的蠟燭圖形態，並顯示每個形態的信號強度。
+	•	形態檢測表格： 詳細列出檢測到的形態，並顯示每個形態的信號強度。
 	•	下載結果： 將檢測結果匯出為 CSV 檔案供後續分析。
 
 範例
@@ -44,11 +44,11 @@ python app.py
 	•	信號強度：20
 
 2. 輸出結果
-	1.	K 線圖：包含成交量和檢測到的形態標記。
-	2.	表格：檢測到的形態及其出現的時間與信號強度。
-	3.	匯出：下載分析結果的 CSV 檔案。
+	1.	K 線圖： 包含成交量和檢測到的形態標記。
+	2.	表格： 檢測到的形態及其出現的時間與信號強度。
+	3.	匯出： 下載分析結果的 CSV 檔案。
 
-Candlestick Pattern Recognition Tool
+Candlestick Pattern Recognition Tool DAVID888
 
 This tool leverages yfinance to fetch stock data and uses TA-Lib to detect candlestick patterns. It provides detailed results, including visual charts and a list of detected patterns.
 
@@ -74,10 +74,10 @@ Run the Application
 python app.py
 
 Interface Features
-	1.	Enter the stock ticker (e.g., AAPL or 2330.TW).
-	2.	Select the time period for analysis (1 month to 1 year).
-	3.	Choose the types of candlestick patterns to detect (Bullish or Bearish).
-	4.	Adjust the signal strength filter (default is 0 to show all detected patterns).
+	1.	Enter the stock ticker: E.g., AAPL or 2330.TW.
+	2.	Select the time period for analysis: 1 month to 1 year.
+	3.	Choose candlestick pattern types: Bullish or Bearish patterns.
+	4.	Adjust the signal strength filter: Default is 0 to show all detected patterns.
 	5.	Click the Submit button to view the analysis results.
 
 Feature Highlights
@@ -98,4 +98,3 @@ Example
 	2.	Table: Details detected patterns, their occurrence, and signal strength.
 	3.	Export: Download the analysis results as a CSV file.
 
-Enjoy analyzing stock candlestick patterns!
