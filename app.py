@@ -214,21 +214,44 @@ def analyze_stock(ticker, period='6mo', pattern_types=None, signal_strength=0):
 # 定義常用的蠟燭圖形態
 COMMON_PATTERNS = {
     "看漲形態": [
-        "CDLMORNINGSTAR",    # 晨星
+        "CDLMORNINGSTAR",     # 晨星
         "CDLMORNINGDOJISTAR", # 晨星十字星
-        "CDLHAMMER",         # 錘子線
-        "CDLINVERTEDHAMMER", # 倒錘子線
-        "CDLENGULFING",      # 吞沒形態
-        "CDLPIERCING",       # 穿刺線
-        "CDL3WHITESOLDIERS"  # 三白兵
+        "CDLHAMMER",          # 錘子線
+        "CDLINVERTEDHAMMER",  # 倒錘子線
+        "CDLENGULFING",       # 吞沒形態(看漲)
+        "CDLPIERCING",        # 穿刺線
+        "CDL3WHITESOLDIERS",  # 三白兵
+        "CDLHARAMI",          # 懷孕線(看漲)
+        "CDLINNECK",          # 內頸線
+        "CDLONNECK",          # 上頸線
+        "CDLBELTHOLD",        # 捉腰帶線(看漲)
+        "CDLHOMINGPIGEON",    # 返家鴿
+        "CDLMATCHINGLOW",     # 相同低點
+        "CDLTHRUSTING",       # 戳入線
+        "CDLUNIQUE3RIVER",    # 獨特三河
+        "CDLLADDERBOTTOM",    # 梯底
+        "CDLMARUBOZU",        # 光頭光腳/缺影線(看漲)
+        "CDLTAKURI"           # 探水竿
     ],
     "看跌形態": [
-        "CDLEVENINGSTAR",    # 暮星
+        "CDLEVENINGSTAR",     # 暮星
         "CDLEVENINGDOJISTAR", # 暮星十字星
-        "CDLHANGINGMAN",     # 上吊線
-        "CDLSHOOTINGSTAR",   # 流星
-        "CDLDARKCLOUDCOVER", # 烏雲蓋頂
-        "CDL3BLACKCROWS"     # 三黑鴉
+        "CDLHANGINGMAN",      # 上吊線
+        "CDLSHOOTINGSTAR",    # 流星
+        "CDLDARKCLOUDCOVER",  # 烏雲蓋頂
+        "CDL3BLACKCROWS",     # 三隻烏鴉
+        "CDL2CROWS",          # 二烏鴉
+        "CDL3STARSINSOUTH",   # 南方三星
+        "CDLIDENTICAL3CROWS", # 三隻相同烏鴉
+        "CDLADVANCEBLOCK",    # 大敗形態
+        "CDLBREAKAWAY",       # 脫離形態(看跌)
+        "CDLCOUNTERATTACK",   # 反擊線(看跌)
+        "CDLGAPSIDESIDEWHITE",# 向下跳空並列陰線
+        "CDLGRAVESTONEDOJI",  # 墓碑十字線
+        "CDLHIGHWAVE",        # 長腳十字(看跌)
+        "CDLSTALLEDPATTERN",  # 停頓形態
+        "CDLUPSIDEGAP2CROWS", # 上升跳空兩烏鴉
+        "CDLXSIDEGAP3METHODS" # 跳空三法(看跌)
     ]
 }
 
