@@ -5,6 +5,7 @@ import gradio as gr
 from datetime import datetime
 import plotly.graph_objects as go
 import numpy as np
+import os  # 引入 os 模組以确保文件夹存在
 
 def create_candlestick_chart(data):
     # 將索引轉換為字符串格式
@@ -200,9 +201,12 @@ def analyze_stock(ticker, period='6mo', pattern_types=None, signal_strength=0):
                 name='形態標記'
             ))
         
-        # 儲存CSV
+        # 確保 tmp 文件夹存在
+        os.makedirs('tmp', exist_ok=True)
+
+        # 儲存CSV到 tmp/ 文件夹
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"stock_analysis_{ticker}_{timestamp}.csv"
+        filename = os.path.join('tmp', f"stock_analysis_{ticker}_{timestamp}.csv")
         results_df.to_csv(filename)
         
         if results_df.empty:
@@ -312,5 +316,12 @@ with gr.Blocks() as interface:
         outputs=[output_table, chart_output, file_output]
     )
 
+# if __name__ == "__main__":
+#     interface.launch()
+
 if __name__ == "__main__":
-    interface.launch()
+    interface.launch(
+        server_name="0.0.0.0",  # 允許外部訪問
+        server_port=5678,        # 指定端口
+        share=False             # 不使用 Gradio 的分享功能
+    )
