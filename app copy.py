@@ -4,13 +4,14 @@ import pandas as pd
 import gradio as gr
 from datetime import datetime
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import numpy as np
 import os
 
-# ------------------------------------------------------
-# 1) 蠟燭形態對照表（中文） + 偵測函式
-# ------------------------------------------------------
+# ---------------------------
+# 蠟燭形態部分（Candlestick Patterns）
+# ---------------------------
+
+# 定義友善顯示用的字典 (僅保留中文形態名 + 英文代號)
 pattern_descriptions = {
     "CDL2CROWS": "雙鴉（CDL2CROWS）",
     "CDL3BLACKCROWS": "三烏鴉（CDL3BLACKCROWS）",
@@ -75,7 +76,69 @@ pattern_descriptions = {
     "CDLXSIDEGAP3METHODS": "上升 / 下降跳空三法（CDLXSIDEGAP3METHODS）"
 }
 
+def create_candlestick_chart(data):
+    # 將索引轉為字串
+    date_strings = [d.strftime('%Y-%m-%d') for d in data.index]
+    
+    fig = go.Figure(data=[go.Candlestick(
+        x=date_strings,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name='K線'
+    )])
+    
+    # 加入成交量
+    fig.add_trace(go.Bar(
+        x=date_strings,
+        y=data['Volume'],
+        name='成交量',
+        yaxis='y2',
+        marker_color='rgba(128,128,128,0.5)'
+    ))
+    
+    fig.update_layout(
+        title='股票價格走勢圖',
+        yaxis_title='價格',
+        yaxis2=dict(
+            title='成交量',
+            overlaying='y',
+            side='right'
+        ),
+        xaxis_title='日期',
+        height=600
+    )
+    
+    return fig
+
+def fetch_stock_data(ticker, period='6mo'):
+    try:
+        data = yf.download(ticker, period=period)
+        if data.empty:
+            raise ValueError(f"{ticker} 在所選時間內無資料。")
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        required_columns = ['Open', 'High', 'Low', 'Close']
+        missing = [col for col in required_columns if col not in data.columns]
+        if missing:
+            raise ValueError(f"資料缺少必要欄位：{missing}")
+        data = data.dropna(subset=required_columns)
+        for col in required_columns:
+            data[col] = pd.to_numeric(data[col], errors='coerce')
+        if data[required_columns].isnull().any().any():
+            raise ValueError(f"{ticker} 的資料處理後仍含 NaN 值。")
+        return data
+    except Exception as e:
+        raise ValueError(f"抓取 {ticker} 資料失敗，原因：{str(e)}")
+
 def detect_candlestick_patterns(data):
+    required = ['Open', 'High', 'Low', 'Close']
+    if not all(col in data.columns for col in required):
+        raise ValueError("資料缺少必要欄位。")
+    if data[required].isnull().any().any():
+        raise ValueError("資料含 NaN 值。")
+    
     open_prices = data['Open'].values
     high_prices = data['High'].values
     low_prices = data['Low'].values
@@ -150,10 +213,196 @@ def detect_candlestick_patterns(data):
         results[name] = func(open_prices, high_prices, low_prices, close_prices)
     return pd.DataFrame(results, index=data.index)
 
+# ---------------------------
+# 技術指標部分（Technical Indicators）
+# ---------------------------
 
-# ------------------------------------------------------
-# 2) 常用形態分類
-# ------------------------------------------------------
+def calculate_selected_indicators(data, selected_indicators):
+    """
+    根據使用者選擇計算技術指標，回傳一個 DataFrame
+    """
+    indicators = {}
+    open_prices = data['Open'].values
+    high_prices = data['High'].values
+    low_prices = data['Low'].values
+    close_prices = data['Close'].values
+    volume = data['Volume'].values if 'Volume' in data.columns else None
+
+    # Overlap Studies
+    if "MA" in selected_indicators:
+        indicators['MA'] = talib.MA(close_prices)
+    if "SMA" in selected_indicators:
+        indicators['SMA_30'] = talib.SMA(close_prices, timeperiod=30)
+    if "EMA" in selected_indicators:
+        indicators['EMA_30'] = talib.EMA(close_prices, timeperiod=30)
+    if "WMA" in selected_indicators:
+        indicators['WMA_30'] = talib.WMA(close_prices, timeperiod=30)
+    if "DEMA" in selected_indicators:
+        indicators['DEMA_30'] = talib.DEMA(close_prices, timeperiod=30)
+    if "TEMA" in selected_indicators:
+        indicators['TEMA_30'] = talib.TEMA(close_prices, timeperiod=30)
+    if "TRIMA" in selected_indicators:
+        indicators['TRIMA_30'] = talib.TRIMA(close_prices, timeperiod=30)
+    if "KAMA" in selected_indicators:
+        indicators['KAMA_30'] = talib.KAMA(close_prices, timeperiod=30)
+    if "BBANDS" in selected_indicators:
+        upper, middle, lower = talib.BBANDS(close_prices, timeperiod=20)
+        indicators['BBANDS_Upper'] = upper
+        indicators['BBANDS_Middle'] = middle
+        indicators['BBANDS_Lower'] = lower
+    if "SAR" in selected_indicators:
+        indicators['SAR'] = talib.SAR(high_prices, low_prices, acceleration=0.02, maximum=0.2)
+    if "MIDPOINT" in selected_indicators:
+        indicators['MIDPOINT'] = talib.MIDPOINT(close_prices, timeperiod=14)
+    if "MIDPRICE" in selected_indicators:
+        indicators['MIDPRICE'] = talib.MIDPRICE(high_prices, low_prices, timeperiod=14)
+    
+    # Momentum Indicators
+    if "RSI" in selected_indicators:
+        indicators['RSI_14'] = talib.RSI(close_prices, timeperiod=14)
+    if "STOCH" in selected_indicators:
+        slowk, slowd = talib.STOCH(high_prices, low_prices, close_prices)
+        indicators['STOCH_%K'] = slowk
+        indicators['STOCH_%D'] = slowd
+    if "STOCHF" in selected_indicators:
+        fastk, fastd = talib.STOCHF(high_prices, low_prices, close_prices)
+        indicators['STOCHF_%K'] = fastk
+        indicators['STOCHF_%D'] = fastd
+    if "STOCHRSI" in selected_indicators:
+        indicators['STOCHRSI'] = talib.STOCHRSI(close_prices, timeperiod=14)
+    if "MACD" in selected_indicators:
+        macd, signal, hist = talib.MACD(close_prices, fastperiod=12, slowperiod=26, signalperiod=9)
+        indicators['MACD'] = macd
+        indicators['MACD_Signal'] = signal
+        indicators['MACD_Hist'] = hist
+    if "TRIX" in selected_indicators:
+        indicators['TRIX'] = talib.TRIX(close_prices, timeperiod=30)
+    if "WILLR" in selected_indicators:
+        indicators['WILLR'] = talib.WILLR(high_prices, low_prices, close_prices, timeperiod=14)
+    if "ADX" in selected_indicators:
+        indicators['ADX'] = talib.ADX(high_prices, low_prices, close_prices, timeperiod=14)
+    if "ADXR" in selected_indicators:
+        indicators['ADXR'] = talib.ADXR(high_prices, low_prices, close_prices, timeperiod=14)
+    if "APO" in selected_indicators:
+        indicators['APO'] = talib.APO(close_prices, fastperiod=12, slowperiod=26)
+    if "AROON" in selected_indicators:
+        aroon_down, aroon_up = talib.AROON(high_prices, low_prices, timeperiod=14)
+        indicators['AROON_Up'] = aroon_up
+        indicators['AROON_Down'] = aroon_down
+    if "AROONOSC" in selected_indicators:
+        indicators['AROONOSC'] = talib.AROONOSC(high_prices, low_prices, timeperiod=14)
+    if "CCI" in selected_indicators:
+        indicators['CCI'] = talib.CCI(high_prices, low_prices, close_prices, timeperiod=14)
+    if "CMO" in selected_indicators:
+        indicators['CMO'] = talib.CMO(close_prices, timeperiod=14)
+    if "MFI" in selected_indicators and volume is not None:
+        indicators['MFI'] = talib.MFI(high_prices, low_prices, close_prices, volume, timeperiod=14)
+    if "MOM" in selected_indicators:
+        indicators['MOM'] = talib.MOM(close_prices, timeperiod=10)
+    if "PPO" in selected_indicators:
+        indicators['PPO'] = talib.PPO(close_prices, fastperiod=12, slowperiod=26)
+    if "ROC" in selected_indicators:
+        indicators['ROC'] = talib.ROC(close_prices, timeperiod=10)
+    if "ULTOSC" in selected_indicators:
+        indicators['ULTOSC'] = talib.ULTOSC(high_prices, low_prices, close_prices)
+    
+    # Volume Indicators
+    if "AD" in selected_indicators and volume is not None:
+        indicators['AD'] = talib.AD(high_prices, low_prices, close_prices, volume)
+    if "ADOSC" in selected_indicators and volume is not None:
+        indicators['ADOSC'] = talib.ADOSC(high_prices, low_prices, close_prices, volume)
+    if "OBV" in selected_indicators and volume is not None:
+        indicators['OBV'] = talib.OBV(close_prices, volume)
+    
+    # Volatility Indicators
+    if "TRANGE" in selected_indicators:
+        indicators['TRANGE'] = talib.TRANGE(high_prices, low_prices, close_prices)
+    if "ATR" in selected_indicators:
+        indicators['ATR'] = talib.ATR(high_prices, low_prices, close_prices, timeperiod=14)
+    if "NATR" in selected_indicators:
+        indicators['NATR'] = talib.NATR(high_prices, low_prices, close_prices, timeperiod=14)
+    
+    # Price Transform
+    if "AVGPRICE" in selected_indicators:
+        indicators['AVGPRICE'] = talib.AVGPRICE(open_prices, high_prices, low_prices, close_prices)
+    if "MEDPRICE" in selected_indicators:
+        indicators['MEDPRICE'] = talib.MEDPRICE(high_prices, low_prices)
+    if "TYPPRICE" in selected_indicators:
+        indicators['TYPPRICE'] = talib.TYPPRICE(high_prices, low_prices, close_prices)
+    if "WCLPRICE" in selected_indicators:
+        indicators['WCLPRICE'] = talib.WCLPRICE(high_prices, low_prices, close_prices)
+    
+    indicators_df = pd.DataFrame(indicators, index=data.index)
+    return indicators_df
+
+# ---------------------------
+# 主分析函式：整合蠟燭形態與技術指標
+# ---------------------------
+def analyze_stock(ticker, period='6mo', pattern_types=None, signal_strength=0, selected_indicators=None):
+    try:
+        data = fetch_stock_data(ticker, period)
+        # 蠟燭形態
+        patterns = detect_candlestick_patterns(data)
+        results_df = pd.concat([data, patterns], axis=1)
+        
+        # 選擇欲篩選的形態 (pattern_types 為勾選的群組，來源 COMMON_PATTERNS)
+        if pattern_types and len(pattern_types) > 0:
+            pattern_columns = pattern_types
+        else:
+            pattern_columns = patterns.columns
+
+        filtered_patterns = patterns[pattern_columns]
+        if signal_strength > 0:
+            filtered_patterns = filtered_patterns[
+                (filtered_patterns >= signal_strength) | 
+                (filtered_patterns <= -signal_strength)
+            ]
+        results_df = pd.concat([data, filtered_patterns], axis=1)
+        results_df = results_df[(filtered_patterns != 0).any(axis=1)]
+        
+        # 在 K 線圖上標記出形態位置，顯示友善文字
+        chart = create_candlestick_chart(data)
+        pattern_dates = results_df.index
+        pattern_names = []
+        for date in pattern_dates:
+            p_on_date = filtered_patterns.loc[date]
+            found = p_on_date[p_on_date != 0].index.tolist()
+            friendly = [pattern_descriptions.get(x, x) for x in found]
+            pattern_names.append('\n'.join(friendly))
+        if len(pattern_dates) > 0:
+            date_strings = [d.strftime('%Y-%m-%d') for d in pattern_dates]
+            chart.add_trace(go.Scatter(
+                x=date_strings,
+                y=data.loc[pattern_dates, 'High'],
+                mode='markers+text',
+                marker=dict(symbol='triangle-down', size=15, color='red'),
+                text=pattern_names,
+                textposition="top center",
+                name='形態標記'
+            ))
+        
+        # 技術指標部分（若有勾選）
+        tech_df = pd.DataFrame()
+        if selected_indicators and len(selected_indicators) > 0:
+            tech_df = calculate_selected_indicators(data, selected_indicators)
+            # 將技術指標與原資料合併
+            results_df = pd.concat([results_df, tech_df], axis=1)
+        
+        # 儲存 CSV 結果檔案至 tmp 資料夾
+        os.makedirs('tmp', exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join('tmp', f"stock_analysis_{ticker}_{timestamp}.csv")
+        results_df.to_csv(filename)
+        
+        if results_df.empty:
+            return pd.DataFrame({"Message": [f"{ticker} 無偵測到形態。"]}), None, filename
+        return results_df, chart, filename
+    except Exception as e:
+        return pd.DataFrame({"Error": [str(e)]}), None, None
+
+# ---------------------------
+# 常用蠟燭形態組 (僅選擇部分分類)
+# ---------------------------
 COMMON_PATTERNS = {
     "看漲形態": [
         "CDLMORNINGSTAR",
@@ -196,10 +445,9 @@ COMMON_PATTERNS = {
     ]
 }
 
-
-# ------------------------------------------------------
-# 3) 技術指標計算 (完整清單)
-# ------------------------------------------------------
+# ---------------------------
+# 定義技術指標選項 (取自 TA-Lib 的部分功能)
+# ---------------------------
 TECHNICAL_INDICATORS = [
     # Overlap Studies
     "MA", "SMA", "EMA", "WMA", "DEMA", "TEMA", "TRIMA", "KAMA", "BBANDS", "SAR", "MIDPOINT", "MIDPRICE",
@@ -214,298 +462,21 @@ TECHNICAL_INDICATORS = [
     "AVGPRICE", "MEDPRICE", "TYPPRICE", "WCLPRICE"
 ]
 
-def calculate_selected_indicators(data, selected_indicators):
-    """
-    根據使用者勾選，動態計算各種技術指標並回傳 DataFrame
-    """
-    indicators = {}
-    close_prices = data['Close'].values
-    high_prices = data['High'].values
-    low_prices = data['Low'].values
-    volume = data['Volume'].values if 'Volume' in data.columns else None
-    open_prices = data['Open'].values
-
-    # Overlap Studies
-    if "MA" in selected_indicators:
-        indicators['MA'] = talib.MA(close_prices)
-    if "SMA" in selected_indicators:
-        indicators['SMA_30'] = talib.SMA(close_prices, timeperiod=30)
-    if "EMA" in selected_indicators:
-        indicators['EMA_30'] = talib.EMA(close_prices, timeperiod=30)
-    if "WMA" in selected_indicators:
-        indicators['WMA_30'] = talib.WMA(close_prices, timeperiod=30)
-    if "DEMA" in selected_indicators:
-        indicators['DEMA_30'] = talib.DEMA(close_prices, timeperiod=30)
-    if "TEMA" in selected_indicators:
-        indicators['TEMA_30'] = talib.TEMA(close_prices, timeperiod=30)
-    if "TRIMA" in selected_indicators:
-        indicators['TRIMA_30'] = talib.TRIMA(close_prices, timeperiod=30)
-    if "KAMA" in selected_indicators:
-        indicators['KAMA_30'] = talib.KAMA(close_prices, timeperiod=30)
-    if "BBANDS" in selected_indicators:
-        upper, middle, lower = talib.BBANDS(close_prices, timeperiod=20)
-        indicators['BBANDS_Upper'] = upper
-        indicators['BBANDS_Middle'] = middle
-        indicators['BBANDS_Lower'] = lower
-    if "SAR" in selected_indicators:
-        indicators['SAR'] = talib.SAR(high_prices, low_prices, acceleration=0.02, maximum=0.2)
-    if "MIDPOINT" in selected_indicators:
-        indicators['MIDPOINT'] = talib.MIDPOINT(close_prices, timeperiod=14)
-    if "MIDPRICE" in selected_indicators:
-        indicators['MIDPRICE'] = talib.MIDPRICE(high_prices, low_prices, timeperiod=14)
-
-    # Momentum Indicators
-    if "RSI" in selected_indicators:
-        indicators['RSI_14'] = talib.RSI(close_prices, timeperiod=14)
-    if "STOCH" in selected_indicators:
-        slowk, slowd = talib.STOCH(high_prices, low_prices, close_prices)
-        indicators['STOCH_%K'] = slowk
-        indicators['STOCH_%D'] = slowd
-    if "STOCHF" in selected_indicators:
-        fastk, fastd = talib.STOCHF(high_prices, low_prices, close_prices)
-        indicators['STOCHF_%K'] = fastk
-        indicators['STOCHF_%D'] = fastd
-    if "STOCHRSI" in selected_indicators:
-        fastk, fastd = talib.STOCHRSI(close_prices, timeperiod=14)
-        indicators['STOCHRSI_%K'] = fastk
-        indicators['STOCHRSI_%D'] = fastd
-    if "MACD" in selected_indicators:
-        macd, signal, hist = talib.MACD(close_prices, fastperiod=12, slowperiod=26, signalperiod=9)
-        indicators['MACD'] = macd
-        indicators['MACD_Signal'] = signal
-        indicators['MACD_Hist'] = hist
-    if "TRIX" in selected_indicators:
-        indicators['TRIX'] = talib.TRIX(close_prices, timeperiod=30)
-    if "WILLR" in selected_indicators:
-        indicators['WILLR'] = talib.WILLR(high_prices, low_prices, close_prices, timeperiod=14)
-    if "ADX" in selected_indicators:
-        indicators['ADX'] = talib.ADX(high_prices, low_prices, close_prices, timeperiod=14)
-    if "ADXR" in selected_indicators:
-        indicators['ADXR'] = talib.ADXR(high_prices, low_prices, close_prices, timeperiod=14)
-    if "APO" in selected_indicators:
-        indicators['APO'] = talib.APO(close_prices, fastperiod=12, slowperiod=26)
-    if "AROON" in selected_indicators:
-        aroon_down, aroon_up = talib.AROON(high_prices, low_prices, timeperiod=14)
-        indicators['AROON_Up'] = aroon_up
-        indicators['AROON_Down'] = aroon_down
-    if "AROONOSC" in selected_indicators:
-        indicators['AROONOSC'] = talib.AROONOSC(high_prices, low_prices, timeperiod=14)
-    if "CCI" in selected_indicators:
-        indicators['CCI'] = talib.CCI(high_prices, low_prices, close_prices, timeperiod=14)
-    if "CMO" in selected_indicators:
-        indicators['CMO'] = talib.CMO(close_prices, timeperiod=14)
-    if "MFI" in selected_indicators and volume is not None:
-        indicators['MFI'] = talib.MFI(high_prices, low_prices, close_prices, volume, timeperiod=14)
-    if "MOM" in selected_indicators:
-        indicators['MOM'] = talib.MOM(close_prices, timeperiod=10)
-    if "PPO" in selected_indicators:
-        indicators['PPO'] = talib.PPO(close_prices, fastperiod=12, slowperiod=26)
-    if "ROC" in selected_indicators:
-        indicators['ROC'] = talib.ROC(close_prices, timeperiod=10)
-    if "ULTOSC" in selected_indicators:
-        indicators['ULTOSC'] = talib.ULTOSC(high_prices, low_prices, close_prices)
-
-    # Volume Indicators
-    if "AD" in selected_indicators and volume is not None:
-        indicators['AD'] = talib.AD(high_prices, low_prices, close_prices, volume)
-    if "ADOSC" in selected_indicators and volume is not None:
-        indicators['ADOSC'] = talib.ADOSC(high_prices, low_prices, close_prices, volume)
-    if "OBV" in selected_indicators and volume is not None:
-        indicators['OBV'] = talib.OBV(close_prices, volume)
-
-    # Volatility Indicators
-    if "TRANGE" in selected_indicators:
-        indicators['TRANGE'] = talib.TRANGE(high_prices, low_prices, close_prices)
-    if "ATR" in selected_indicators:
-        indicators['ATR'] = talib.ATR(high_prices, low_prices, close_prices, timeperiod=14)
-    if "NATR" in selected_indicators:
-        indicators['NATR'] = talib.NATR(high_prices, low_prices, close_prices, timeperiod=14)
-
-    # Price Transform
-    if "AVGPRICE" in selected_indicators:
-        indicators['AVGPRICE'] = talib.AVGPRICE(open_prices, high_prices, low_prices, close_prices)
-    if "MEDPRICE" in selected_indicators:
-        indicators['MEDPRICE'] = talib.MEDPRICE(high_prices, low_prices)
-    if "TYPPRICE" in selected_indicators:
-        indicators['TYPPRICE'] = talib.TYPPRICE(high_prices, low_prices, close_prices)
-    if "WCLPRICE" in selected_indicators:
-        indicators['WCLPRICE'] = talib.WCLPRICE(high_prices, low_prices, close_prices)
-
-    return pd.DataFrame(indicators, index=data.index)
-
-
-# ------------------------------------------------------
-# 4) 資料抓取
-# ------------------------------------------------------
-def fetch_stock_data(ticker, period='6mo'):
-    data = yf.download(ticker, period=period)
-    if data.empty:
-        raise ValueError(f"{ticker} 在所選時間內無資料。")
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-    required_columns = ['Open', 'High', 'Low', 'Close']
-    missing = [col for col in required_columns if col not in data.columns]
-    if missing:
-        raise ValueError(f"資料缺少必要欄位：{missing}")
-    data = data.dropna(subset=required_columns)
-    return data
-
-
-# ------------------------------------------------------
-# 5) 建立多子圖 (3 rows):
-#    row=1: Candlestick + 蠟燭形態標記
-#    row=2: Volume
-#    row=3: 技術指標
-# ------------------------------------------------------
-def create_subplots_chart(data, patterns_df, tech_df):
-    """
-    建立一個包含 3 個子圖的 figure:
-    - row=1: K 線 + 形態標記
-    - row=2: 成交量
-    - row=3: 技術指標
-    """
-    date_strings = [d.strftime('%Y-%m-%d') for d in data.index]
-
-    # 產生 3x1 子圖, row_heights 可自行調整
-    fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
-                        row_heights=[0.4, 0.2, 0.4],
-                        vertical_spacing=0.03)
-
-    # (A) row=1, col=1 放 K 線
-    fig.add_trace(
-        go.Candlestick(
-            x=date_strings,
-            open=data['Open'],
-            high=data['High'],
-            low=data['Low'],
-            close=data['Close'],
-            name='K線'
-        ),
-        row=1, col=1
-    )
-
-    # (B) row=1, col=1: 標記蠟燭形態
-    if not patterns_df.empty:
-        pattern_dates = patterns_df.index
-        if len(pattern_dates) > 0:
-            found_labels = []
-            for dt in pattern_dates:
-                row_data = patterns_df.loc[dt]
-                shapes = row_data[row_data != 0].index.tolist()
-                friendly = [pattern_descriptions.get(x, x) for x in shapes]
-                found_labels.append('\n'.join(friendly))
-            date_markers = [d.strftime('%Y-%m-%d') for d in pattern_dates]
-            fig.add_trace(
-                go.Scatter(
-                    x=date_markers,
-                    y=data.loc[pattern_dates, 'High'],
-                    mode='markers+text',
-                    marker=dict(symbol='triangle-down', size=15, color='red'),
-                    text=found_labels,
-                    textposition="top center",
-                    name='形態標記'
-                ),
-                row=1, col=1
-            )
-
-    # (C) row=2, col=1: 成交量 (獨立子圖)
-    fig.add_trace(
-        go.Bar(
-            x=date_strings,
-            y=data['Volume'],
-            name='成交量',
-            marker_color='rgba(128,128,128,0.5)'
-        ),
-        row=2, col=1
-    )
-
-    # (D) row=3, col=1: 技術指標
-    if not tech_df.empty:
-        for col in tech_df.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=date_strings,
-                    y=tech_df[col],
-                    mode='lines',
-                    name=col
-                ),
-                row=3, col=1
-            )
-
-    fig.update_layout(
-        height=900,
-        title="Candlestick Pattern & Technical Indicator Analysis by David888.com",
-        xaxis_title="日期"
-    )
-
-    return fig
-
-
-# ------------------------------------------------------
-# 6) 主分析函式: 整合形態偵測、技術指標計算、以及繪製多子圖
-# ------------------------------------------------------
-def analyze_stock(ticker, period='6mo', pattern_types=None, signal_strength=0, selected_indicators=None):
-    try:
-        # 抓取股價資料
-        data = fetch_stock_data(ticker, period)
-
-        # (1) 蠟燭形態偵測
-        all_patterns = detect_candlestick_patterns(data)
-
-        # 依照勾選的形態群組，組出 columns
-        if pattern_types and len(pattern_types) > 0:
-            selected_cols = []
-            for group in pattern_types:
-                selected_cols.extend(COMMON_PATTERNS.get(group, []))
-        else:
-            selected_cols = all_patterns.columns
-
-        # 信號強度過濾
-        patterns_filtered = all_patterns[selected_cols]
-        if signal_strength > 0:
-            patterns_filtered = patterns_filtered[
-                (patterns_filtered >= signal_strength) | (patterns_filtered <= -signal_strength)
-            ]
-        patterns_filtered = patterns_filtered[(patterns_filtered != 0).any(axis=1)]
-
-        # (2) 技術指標
-        tech_df = pd.DataFrame()
-        if selected_indicators:
-            tech_df = calculate_selected_indicators(data, selected_indicators)
-
-        # (3) 建立多子圖 (3 rows)
-        chart = create_subplots_chart(data, patterns_filtered, tech_df)
-
-        # (4) 合併所有資訊到 results_df 方便下載
-        results_df = pd.concat([data, all_patterns, tech_df], axis=1)
-
-        # (5) 輸出 CSV
-        os.makedirs('tmp', exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join('tmp', f"stock_analysis_{ticker}_{timestamp}.csv")
-        results_df.to_csv(filename)
-
-        if results_df.empty:
-            return pd.DataFrame({"Message": [f"{ticker} 無資料或無形態。"]}), None, filename
-        return results_df, chart, filename
-    except Exception as e:
-        return pd.DataFrame({"Error": [str(e)]}), None, None
-
-
-# ------------------------------------------------------
-# 7) Gradio 介面
-# ------------------------------------------------------
+# ---------------------------
+# Gradio 介面定義
+# ---------------------------
 with gr.Blocks() as interface:
-    gr.Markdown("# Candlestick Pattern & Technical Indicator Analysis by David888.com")
-    gr.Markdown("請輸入股票代碼、時間區間，選擇欲偵測的蠟燭形態、訊號強度以及技術指標。")
-
+    gr.Markdown("# Candlestick Pattern & Technical Indicator Analysis")
+    gr.Markdown("輸入股票代碼與時間區間，選擇欲偵測的蠟燭形態與計算的技術指標。")
+    
     with gr.Row():
         ticker_input = gr.Textbox(label="股票代碼", placeholder="例如：AAPL")
         period_input = gr.Dropdown(
             label="時間區間",
             choices=["1mo", "3mo", "6mo", "1y"],
-            value="3mo"
+            value="6mo"
         )
+    
     with gr.Row():
         pattern_type = gr.CheckboxGroup(
             label="蠟燭形態類型",
@@ -513,36 +484,42 @@ with gr.Blocks() as interface:
             value=["看漲形態", "看跌形態"]
         )
         signal_strength = gr.Slider(
-            label="訊號強度 (0=不過濾)",
+            label="訊號強度 (0 表示不篩選)",
             minimum=0,
             maximum=100,
             value=0,
             step=10
         )
+    
     with gr.Row():
         indicator_selector = gr.CheckboxGroup(
             label="技術指標 (可多選)",
             choices=TECHNICAL_INDICATORS,
-            value=["MACD", "RSI", "BBANDS"]  # 可自行調整預設勾選
+            value=["MACD", "RSI"]
         )
+    
     with gr.Row():
         submit_btn = gr.Button("Submit")
         clear_btn = gr.Button("Clear")
-
+    
     with gr.Column():
-        chart_output = gr.Plot(label="分析圖")
+        chart_output = gr.Plot(label="股票走勢圖")
         output_table = gr.Dataframe(label="分析結果")
-        file_output = gr.File(label="下載 CSV")
-
+        file_output = gr.File(label="下載 CSV 結果")
+    
     def process_input(ticker, period, selected_patterns, strength, selected_indicators):
-        return analyze_stock(ticker, period, selected_patterns, strength, selected_indicators)
-
+        # 將蠟燭形態的群組轉換成具體的指標列表
+        pattern_list = []
+        for group in selected_patterns:
+            pattern_list.extend(COMMON_PATTERNS.get(group, []))
+        return analyze_stock(ticker, period, pattern_list, strength, selected_indicators)
+    
     submit_btn.click(
         fn=process_input,
         inputs=[ticker_input, period_input, pattern_type, signal_strength, indicator_selector],
         outputs=[output_table, chart_output, file_output]
     )
-
+    
     clear_btn.click(
         fn=lambda: (None, None, None),
         inputs=[],
@@ -550,4 +527,8 @@ with gr.Blocks() as interface:
     )
 
 if __name__ == "__main__":
-    interface.launch(server_name="0.0.0.0", server_port=5678, share=False)
+    interface.launch(
+        server_name="0.0.0.0",
+        server_port=5678,
+        share=False
+    )
