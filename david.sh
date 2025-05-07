@@ -8,7 +8,7 @@ docker build --no-cache -t stock-kline-spot .
 
 
 
-docker build -t stock-kline-spot .
+docker build --no-cache -t stock-kline-spot .
 docker run -d -p 5678:5678 --name stock-kline-spot stock-kline-spot
 
 
