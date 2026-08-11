@@ -338,11 +338,18 @@ def calculate_selected_indicators(data, selected_indicators):
 # 4) 資料抓取
 # ------------------------------------------------------
 def fetch_stock_data(ticker, period='6mo'):
-    data = yf.download(ticker, period=period)
+    data = yf.download(ticker, period=period, progress=False)
     if data.empty:
         raise ValueError(f"{ticker} 在所選時間內無資料。")
     if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
+        level0 = data.columns.get_level_values(0)
+        level1 = data.columns.get_level_values(1)
+        if 'Close' in level0 or 'Open' in level0:
+            data.columns = level0
+        elif 'Close' in level1 or 'Open' in level1:
+            data.columns = level1
+        else:
+            data.columns = level0
     required_columns = ['Open', 'High', 'Low', 'Close']
     missing = [col for col in required_columns if col not in data.columns]
     if missing:

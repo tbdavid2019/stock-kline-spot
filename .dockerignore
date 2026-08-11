@@ -1,3 +1,5 @@
+.git
+.github
 __pycache__/
 *.pyc
 *.pyo
@@ -5,3 +7,5 @@ __pycache__/
 myenv/
 tmp/
 .DS_Store
+app copy*.py
+app20250224.py
